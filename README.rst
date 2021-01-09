@@ -44,9 +44,9 @@ Overview
     :alt: Supported implementations
     :target: https://pypi.org/project/heritrix3
 
-.. |commits-since| image:: https://img.shields.io/github/commits-since/Querela/python-heritrix3-client/v0.0.0.svg
+.. |commits-since| image:: https://img.shields.io/github/commits-since/Querela/python-heritrix3-client/v0.1.0.svg
     :alt: Commits since latest release
-    :target: https://github.com/Querela/python-heritrix3-client/compare/v0.0.0...master
+    :target: https://github.com/Querela/python-heritrix3-client/compare/v0.1.0...master
 
 .. end-badges
 

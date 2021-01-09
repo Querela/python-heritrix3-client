@@ -9,6 +9,13 @@ WIP
 * Refactoring common code fragments.
 * Documentation (docstrings).
 
+0.2.0 (2021-01-09)
+------------------
+
+* Typings.
+* Add file download (e.g. all WARCs).
+* Add report retrieval.
+
 0.1.0 (2021-01-09)
 ------------------
 

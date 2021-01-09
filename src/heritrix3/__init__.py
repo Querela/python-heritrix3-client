@@ -2,6 +2,11 @@ __version__ = "0.1.0"
 
 import os
 import time
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Union
 
 import requests
 from lxml import etree
@@ -10,6 +15,9 @@ from requests.auth import HTTPDigestAuth
 # ---------------------------------------------------------------------------
 
 __all__ = ["HeritrixAPIError", "HeritrixAPI"]
+
+#: default chunk/buffer size for downloading is 16kB
+CHUNKSIZE = 16 * 1024
 
 # ---------------------------------------------------------------------------
 
@@ -28,12 +36,22 @@ def disable_ssl_warnings():
 
 
 class HeritrixAPIError(Exception):
+    """Error as response from Heritrix3 REST API.
+
+    Arguments
+    ---------
+    message : str
+        Error description / message.
+    response : Optional[requests.Response]
+        Optional api response object.
+    """
+
     def __init__(self, message: str, *args, **kwargs):
         self.message = message
-        self.response = kwargs.pop("response", None)
+        self.response: Optional[requests.Response] = kwargs.pop("response", None)
         super(HeritrixAPIError, self).__init__(message, *args, **kwargs)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"HeritrixAPIError: {self.message}"
 
 
@@ -45,13 +63,13 @@ class HeritrixAPI:
         self,
         host: str = "https://localhost:8443/engine",
         user: str = "admin",
-        passwd: str = "",
+        passwd: str = "admin",
         verbose: bool = False,
         insecure: bool = True,
-        headers=None,
-        timeout=None,
+        headers: Optional[Dict[str, str]] = None,
+        timeout: Optional[Union[int, float]] = None,
     ):
-        self.host = host
+        self.host: str = host
         self.auth = HTTPDigestAuth(user, passwd)
         self.verbose = verbose
         self.insecure = insecure
@@ -61,16 +79,22 @@ class HeritrixAPI:
         if self.host:
             self.host = self.host.rstrip("/")
 
-        self.headers = {"Accept": "application/xml"}
+        self.headers: Dict[str, str] = {"Accept": "application/xml"}
 
         if isinstance(headers, dict):
             self.headers.update(headers)
 
-        self.last_response = None
+        self.last_response: Optional[requests.Response] = None
 
     def _post(
-        self, url=None, data=None, headers=None, code=None, timeout=None, raw=True
-    ):
+        self,
+        url: Optional[str] = None,
+        data: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, str]] = None,
+        code: Optional[int] = None,
+        timeout: Optional[Union[int, float]] = None,
+        raw: bool = True,
+    ) -> Union[str, requests.Response]:
         if not url:
             url = self.host
 
@@ -103,13 +127,13 @@ class HeritrixAPI:
 
     def _get(
         self,
-        url=None,
-        headers=None,
-        api_headers=True,
-        code=None,
-        timeout=None,
-        raw=True,
-    ):
+        url: Optional[str] = None,
+        headers: Optional[Dict[str, str]] = None,
+        api_headers: Optional[Dict[str, str]] = True,
+        code: Optional[int] = None,
+        timeout: Optional[Union[int, float]] = None,
+        raw: bool = True,
+    ) -> Union[str, requests.Response]:
         if not url:
             url = self.host
 
@@ -139,8 +163,14 @@ class HeritrixAPI:
         return resp
 
     def _post_action(
-        self, action: str, url=None, data=None, headers=None, code=None, raw=True
-    ):
+        self,
+        action: str,
+        url: Optional[str] = None,
+        data: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, str]] = None,
+        code: Optional[int] = None,
+        raw: bool = True,
+    ) -> Union[str, requests.Response]:
         if not action:
             raise ValueError("Missing action.")
 
@@ -151,7 +181,14 @@ class HeritrixAPI:
 
         return self._post(url=url, data=data, headers=headers, code=code, raw=raw)
 
-    def _job_action(self, action: str, job_name: str, data=None, code=None, raw=True):
+    def _job_action(
+        self,
+        action: str,
+        job_name: str,
+        data: Optional[Dict[str, Any]] = None,
+        code: Optional[int] = None,
+        raw: bool = True,
+    ) -> Union[str, requests.Response]:
         if not job_name:
             raise ValueError("Missing job name.")
 
@@ -161,7 +198,9 @@ class HeritrixAPI:
 
     # --------------------------------
 
-    def info(self, job_name: str = None, raw: bool = False):
+    def info(
+        self, job_name: Optional[str] = None, raw: bool = False
+    ) -> Union[str, requests.Response]:
         url = None
         if job_name is not None:
             url = f"{self.host}/job/{job_name}"
@@ -170,7 +209,7 @@ class HeritrixAPI:
 
         return resp
 
-    def get_job_actions(self, job_name: str):
+    def get_job_actions(self, job_name: str) -> List[str]:
         # info = self.info(job_name=job_name, raw=False)
         # return info["job"]["availableActions"]["value"]
         resp = self.info(job_name=job_name, raw=True)
@@ -178,7 +217,13 @@ class HeritrixAPI:
         actions = xml_doc.xpath("/job/availableActions/value/text()")
         return actions
 
-    def wait_for_action(self, job_name: str, action: str, timeout=20, poll_delay=1):
+    def wait_for_action(
+        self,
+        job_name: str,
+        action: str,
+        timeout: Union[int, float] = 20,
+        poll_delay: Union[int, float] = 1,
+    ) -> bool:
         if poll_delay <= 0:
             raise ValueError("poll_delay mustn't be negative or null!")
 
@@ -197,13 +242,13 @@ class HeritrixAPI:
 
     # --------------------------------
 
-    def create(self, job_name: str, raw: bool = False):
+    def create(self, job_name: str, raw: bool = False) -> Union[str, requests.Response]:
         if not job_name:
             raise ValueError("Missing job name.")
 
         return self._post_action("create", data={"createpath": job_name}, raw=raw)
 
-    def add(self, job_dir: str, raw: bool = False):
+    def add(self, job_dir: str, raw: bool = False) -> Union[str, requests.Response]:
         if not job_dir:
             raise ValueError("Missing job directory.")
         # TODO: check that a cxml file is in the directory?
@@ -212,34 +257,44 @@ class HeritrixAPI:
 
     # --------------------------------
 
-    def build(self, job_name: str, raw: bool = False):
+    def build(self, job_name: str, raw: bool = False) -> Union[str, requests.Response]:
         return self._job_action("build", job_name, raw=raw)
 
-    def launch(self, job_name: str, checkpoint=None, raw: bool = False):
+    def launch(
+        self, job_name: str, checkpoint: Optional[str] = None, raw: bool = False
+    ) -> Union[str, requests.Response]:
         data = None
         if checkpoint is not None:
             data = {"checkpoint": checkpoint}
 
         return self._job_action("launch", job_name, data=data, raw=raw)
 
-    def pause(self, job_name: str, raw: bool = False):
+    def pause(self, job_name: str, raw: bool = False) -> Union[str, requests.Response]:
         return self._job_action("pause", job_name, raw=raw)
 
-    def unpause(self, job_name: str, raw: bool = False):
+    def unpause(
+        self, job_name: str, raw: bool = False
+    ) -> Union[str, requests.Response]:
         return self._job_action("unpause", job_name, raw=raw)
 
-    def terminate(self, job_name: str, raw: bool = False):
+    def terminate(
+        self, job_name: str, raw: bool = False
+    ) -> Union[str, requests.Response]:
         return self._job_action("terminate", job_name, raw=raw)
 
-    def teardown(self, job_name: str, raw: bool = False):
+    def teardown(
+        self, job_name: str, raw: bool = False
+    ) -> Union[str, requests.Response]:
         return self._job_action("teardown", job_name, raw=raw)
 
-    def checkpoint(self, job_name: str, raw: bool = False):
+    def checkpoint(
+        self, job_name: str, raw: bool = False
+    ) -> Union[str, requests.Response]:
         return self._job_action("checkpoint", job_name, raw=raw)
 
     # --------------------------------
 
-    def rescan(self, raw=False):
+    def rescan(self, raw: bool = False) -> Union[str, requests.Response]:
         return self._post_action("rescan", raw=raw)
 
     def copy(
@@ -248,7 +303,7 @@ class HeritrixAPI:
         new_job_name: str,
         as_profile: bool = False,
         raw: bool = False,
-    ):
+    ) -> Union[str, requests.Response]:
         if not new_job_name:
             raise ValueError("new_job_name must not be empty!")
 
@@ -263,7 +318,7 @@ class HeritrixAPI:
 
     def execute_script(
         self, job_name: str, script: str, engine: str = "beanshell", raw: bool = False
-    ):
+    ) -> Union[str, requests.Response]:
         if not job_name:
             raise ValueError("Missing job name.")
         if not script:
@@ -281,18 +336,19 @@ class HeritrixAPI:
 
     # --------------------------------
 
-    def send_file(self, job_name: str, filepath, name=None):
+    def send_file(
+        self, job_name: str, filepath: os.PathLike, name: Optional[str] = None
+    ) -> bool:
         if not job_name:
             raise ValueError("Missing job name.")
         if not filepath:
             raise ValueError("Missing filepath.")
         if not os.path.exists(filepath) or not os.path.isfile(filepath):
-            raise HeritrixAPIError(f"File does not exist!, {filepath}")
+            raise FileNotFoundError(filepath)
 
         if not name:
             name = os.path.basename(filepath)
         url = f"{self.host}/job/{job_name}/jobdir/{name}"
-        # TODO: check config url with :func:`get_config_url()` ?
 
         with open(filepath, "rb") as fdat:
             resp = requests.put(
@@ -304,17 +360,19 @@ class HeritrixAPI:
             )
         return resp.ok
 
-    def send_config(self, job_name: str, cxml_filepath):
+    def send_config(self, job_name: str, cxml_filepath: os.PathLike) -> bool:
         if not job_name:
             raise ValueError("Missing job name.")
         if cxml_filepath is None or cxml_filepath == "":
             raise ValueError("Missing cxml filepath name.")
         if not os.path.exists(cxml_filepath) or not os.path.isfile(cxml_filepath):
-            raise HeritrixAPIError(f"CXML file does not exist!, {cxml_filepath}")
+            raise FileNotFoundError(cxml_filepath)
+
+        # TODO: check config url with :func:`get_config_url()` ?
 
         return self.send_file(job_name, cxml_filepath, "crawler-beans.cxml")
 
-    def get_config_url(self, job_name: str):
+    def get_config_url(self, job_name: str) -> str:
         if not job_name:
             raise ValueError("Missing job name.")
 
@@ -332,18 +390,58 @@ class HeritrixAPI:
 
         return config_url[0]
 
-    def get_config(self, job_name: str, raw: bool = True):
+    def get_config(self, job_name: str, raw: bool = True) -> str:
         config_url = self.get_config_url(job_name)
 
         resp = self._get(url=config_url, code=200, raw=raw)
 
         return resp.text
 
+    def retrieve_file(
+        self,
+        job_name: str,
+        local_filepath: os.PathLike,
+        job_filepath: Union[str, os.PathLike],
+        overwrite: bool = False,
+    ) -> bool:
+        if not job_name:
+            raise ValueError("Missing job name.")
+        if not local_filepath:
+            raise ValueError("Missing local_filepath.")
+        if not overwrite and (
+            os.path.exists(local_filepath) or os.path.isfile(local_filepath)
+        ):
+            raise FileExistsError(local_filepath)
+        if not job_filepath:
+            raise ValueError("Missing job_filepath.")
+
+        prefix = f"./jobs/{job_name}/"
+        if job_filepath.startswith(prefix):
+            job_filepath = job_filepath[len(prefix) :]  # noqa: E203
+
+        url = f"{self.host}/job/{job_name}/jobdir/{job_filepath}"
+
+        # see: https://stackoverflow.com/questions/16694907/download-large-file-in-python-with-requests
+        with requests.get(
+            url,
+            auth=self.auth,
+            headers=self.headers,
+            verify=not self.insecure,
+            stream=True,
+        ) as resp:
+            if resp.ok:
+                with open(local_filepath, "wb") as fp:
+                    for chunk in resp.iter_content(chunk_size=CHUNKSIZE):
+                        fp.write(chunk)
+                    # shutil.copyfileobj(resp.raw, fp)
+
+        return resp.ok
+
     # --------------------------------
     # --------------------------------
 
     @classmethod
-    def _xml2json(cls, xml_str):
+    def _xml2json(cls, xml_str: Union[str, "etree._Element"]) -> str:
         if isinstance(xml_str, str):
             xml_doc = etree.fromstring(xml_str)
         elif isinstance(xml_str, etree._Element):
@@ -354,7 +452,7 @@ class HeritrixAPI:
         return cls.__tree_to_dict(xml_doc)
 
     @classmethod
-    def __tree_to_dict(cls, tree):
+    def __tree_to_dict(cls, tree: "etree._Element") -> Dict[str, Any]:
         # see: https://github.com/WilliamMayor/hapy/blob/master/hapy/hapy.py#L213
         if len(tree) == 0:
             return {tree.tag: tree.text}
@@ -373,8 +471,10 @@ class HeritrixAPI:
 
     # --------------------------------
 
-    def list_jobs(self, status=None, unbuilt: bool = False):
-        resp = self._get(raw=True)
+    def list_jobs(
+        self, status: Optional[str] = None, unbuilt: bool = False
+    ) -> List[str]:
+        resp: requests.Response = self._get(raw=True)
         xml_doc = etree.fromstring(resp.text)
 
         if unbuilt:
@@ -390,7 +490,7 @@ class HeritrixAPI:
         job_names = [job.find("shortName").text for job in jobs]
         return job_names
 
-    def get_launchid(self, job_name: str):
+    def get_launchid(self, job_name: str) -> Optional[str]:
         script = "rawOut.println( appCtx.getCurrentLaunchId() );"
         resp = self.execute_script(
             job_name, script=script, engine="beanshell", raw=True
@@ -411,41 +511,117 @@ class HeritrixAPI:
             return None
         return ret
 
-    def crawl_report(self, job_name: str, launch_id=None):
+    def _get_report(
+        self,
+        job_name: str,
+        report_name: str,
+        report_meta_name: Optional[str] = None,
+        launch_id: Optional[str] = None,
+    ) -> Optional[str]:
         if launch_id is None:
+            if report_meta_name:
+                try:
+                    # use meta URL to get latest (disable HTTP caching)
+                    url = f"{self.host}/job/{job_name}/report/{report_meta_name}"
+
+                    resp = self._get(url=url, api_headers=False, raw=True)
+                    if resp.ok:
+                        return resp.text
+                except Exception as ex:  # noqa: F841
+                    pass
+
             try:
                 # if no launchid - try to get with "latest"
-                url = (
-                    f"{self.host}/job/{job_name}/jobdir/latest/reports/crawl-report.txt"
-                )
+                url = f"{self.host}/job/{job_name}/jobdir/latest/reports/{report_name}"
 
                 resp = self._get(url=url, api_headers=False, raw=True)
-                return resp.text
-            except Exception as ex:
-                # if that fails, try to query the launch_id and try again
-                launch_id = self.get_launchid(job_name)
+                if resp.ok:
+                    return resp.text
+            except Exception as ex:  # noqa: F841
+                pass
 
-                if launch_id is None:
-                    # unbuilt job?
-                    # either it got anything with latest or there simply was not yet a crawl
-                    raise HeritrixAPIError(
-                        f"Unbuilt Job {job_name}, check if has ever crawled?"
-                    ) from ex
+            # if that fails, try to query the launch_id and try again
+            launch_id = self.get_launchid(job_name)
 
-                return self.crawl_report(job_name, launch_id=launch_id)
+            if launch_id is None:
+                # unbuilt job?
+                # either it got anything with latest or there simply was not yet a crawl
+                raise HeritrixAPIError(
+                    f"Unbuilt Job {job_name}, check if has ever crawled?"
+                )
+
+            return self._get_report(
+                job_name,
+                report_name,
+                report_meta_name=report_meta_name,
+                launch_id=launch_id,
+            )
 
         # ----------------------------
 
-        url = f"{self.host}/job/{job_name}/jobdir/{launch_id}/reports/crawl-report.txt"
+        url = f"{self.host}/job/{job_name}/jobdir/{launch_id}/reports/{report_name}"
 
         resp = self._get(url=url, api_headers=False, raw=True)
-        return resp.text
+        if resp.ok:
+            return resp.text
+
+        return None
+
+    def crawl_report(
+        self, job_name: str, launch_id: Optional[str] = None
+    ) -> Optional[str]:
+        return self._get_report(
+            job_name,
+            "crawl-report.txt",
+            report_meta_name="CrawlSummaryReport",
+            launch_id=launch_id,
+        )
+
+    def seeds_report(
+        self, job_name: str, launch_id: Optional[str] = None
+    ) -> Optional[str]:
+        return self._get_report(
+            job_name,
+            "seeds-report.txt",
+            report_meta_name="SeedsReport",
+            launch_id=launch_id,
+        )
+
+    def hosts_report(
+        self, job_name: str, launch_id: Optional[str] = None
+    ) -> Optional[str]:
+        return self._get_report(
+            job_name,
+            "hosts-report.txt",
+            report_meta_name="HostsReport",
+            launch_id=launch_id,
+        )
+
+    def mimetypes_report(
+        self, job_name: str, launch_id: Optional[str] = None
+    ) -> Optional[str]:
+        return self._get_report(
+            job_name,
+            "mimetype-report.txt",
+            report_meta_name="MimetypesReport",
+            launch_id=launch_id,
+        )
+
+    def responsecodes_report(
+        self, job_name: str, launch_id: Optional[str] = None
+    ) -> Optional[str]:
+        return self._get_report(
+            job_name,
+            "responsecode-report.txt",
+            report_meta_name="ResponseCodeReport",
+            launch_id=launch_id,
+        )
 
     # --------------------------------
 
     def list_files(
         self, job_name: str, gather_files: bool = True, gather_folders: bool = True
-    ):
+    ) -> List[str]:
         script_fileout = """
             it.eachFile {
                 rawOut.println( it );
@@ -470,7 +646,9 @@ class HeritrixAPI:
         listRecurs( job.jobDir )
         """
 
-        resp = self.execute_script(job_name, script=script, engine="groovy", raw=True)
+        resp: requests.Response = self.execute_script(
+            job_name, script=script, engine="groovy", raw=True
+        )
 
         if not resp.ok:
             if resp.status_code == 500:
@@ -494,7 +672,9 @@ class HeritrixAPI:
         lines = [ln.strip() for ln in text.splitlines()]
         return lines
 
-    def list_warcs(self, job_name: str, launchid=None):
+    def list_warcs(
+        self, job_name: str, launchid: Optional[str] = None
+    ) -> Optional[List[str]]:
         if not launchid:
             launchid = "latest"
 
@@ -523,13 +703,65 @@ class HeritrixAPI:
             errtree = tree.find("exception")
             if errtree is not None:
                 error = errtree.text
+                # check if path simply does not yet exists for job,
+                # then no files, return None
+                if (
+                    "javax.script.ScriptException: java.io.FileNotFoundException:"
+                    in error
+                ):
+                    return None
+            # otherwise other error
             raise HeritrixAPIError(f"Error executing list_warcs script: {error}")
 
         text = outtree.text.strip()
         lines = [ln.strip() for ln in text.splitlines()]
         return lines
 
-    def delete_job_dir(self, job_name: str):
+    def retrieve_warcs(
+        self,
+        job_name: str,
+        local_folderpath: os.PathLike,
+        launchid: Optional[str] = None,
+        warcs_job_filepaths: Optional[List[Union[str, os.PathLike]]] = None,
+        overwrite: bool = False,
+    ) -> Optional[int]:
+        if not job_name:
+            raise ValueError("Missing job name.")
+        if not local_folderpath:
+            raise ValueError("Missing local_folderpath.")
+        if not os.path.exists(local_folderpath) or not os.path.isdir(local_folderpath):
+            raise FileNotFoundError(local_folderpath)
+
+        if not warcs_job_filepaths:
+            # try to query file list from job
+            # if it throws an error, forward it to user
+            warcs_job_filepaths = self.list_warcs(job_name, launchid=launchid)
+
+        # if None return None to signal no warcs provided and job can't find any?
+        if warcs_job_filepaths is None:
+            return None
+        # will return 0 if empty list (job has nothing crawled as of yet)
+
+        num_ok = num_bad = 0
+        for warc_filepath in warcs_job_filepaths:
+            warc_name = warc_filepath.rsplit("/", 1)[-1]
+            local_filepath = os.path.join(local_folderpath, warc_name)
+
+            # retrieve file
+            ok = self.retrieve_file(
+                job_name, local_filepath, warc_filepath, overwrite=overwrite
+            )
+            if ok:
+                num_ok += 1
+            else:
+                num_bad += 1
+            # NOW, how to handle errors, abort?
+            # continue with next?
+            # AND, what to return, count ok, count not ok, raise errors?
+
+        return num_ok
+
+    def delete_job_dir(self, job_name: str) -> None:
         script = """
         def delRecurs;
         delRecurs = {
@@ -542,7 +774,9 @@ class HeritrixAPI:
         delRecurs( job.jobDir )
         """
 
-        resp = self.execute_script(job_name, script=script, engine="groovy", raw=True)
+        resp: requests.Response = self.execute_script(
+            job_name, script=script, engine="groovy", raw=True
+        )
 
         if not resp.ok:
             raise HeritrixAPIError(

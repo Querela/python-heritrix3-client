@@ -1,6 +1,5 @@
 graft docs
 graft src
-graft ci
 graft tests
 
 include .bumpversion.cfg
@@ -14,6 +13,6 @@ include CONTRIBUTING.rst
 include LICENSE
 include README.rst
 
-include tox.ini .travis.yml .appveyor.yml .readthedocs.yml .pre-commit-config.yaml
+include tox.ini .readthedocs.yml .pre-commit-config.yaml
 
 global-exclude *.py[cod] __pycache__/* *.so *.dylib

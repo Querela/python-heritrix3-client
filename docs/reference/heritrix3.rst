@@ -1,9 +1,8 @@
 heritrix3
 =========
 
-.. testsetup::
-
-    from heritrix3 import *
-
 .. automodule:: heritrix3
     :members:
+    :undoc-members:
+
+.. autofunction:: heritrix3.disable_ssl_warnings

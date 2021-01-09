@@ -49,16 +49,13 @@ setup(
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3 :: Only",
+        "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: Implementation :: CPython",
         "Programming Language :: Python :: Implementation :: PyPy",
-        # uncomment if you test on these interpreters:
-        # 'Programming Language :: Python :: Implementation :: IronPython',
-        # 'Programming Language :: Python :: Implementation :: Jython',
-        # 'Programming Language :: Python :: Implementation :: Stackless',
         "Topic :: Utilities",
     ],
     project_urls={
@@ -67,17 +64,17 @@ setup(
         "Issue Tracker": "https://github.com/Querela/python-heritrix3-client/issues",
     },
     keywords=[
-        # eg: 'keyword1', 'keyword2', 'keyword3',
+        "heritrix",
+        "api",
     ],
     python_requires=">=3.6",
     install_requires=[
         "click",
-        # eg: 'aspectlib==1.1.1', 'six>=1.7',
+        "lxml",
+        "requests",
     ],
     extras_require={
-        # eg:
-        #   'rst': ['docutils>=0.11'],
-        #   ':python_version=="2.6"': ['argparse'],
+        "cli": ["pygments"],
     },
     entry_points={
         "console_scripts": [

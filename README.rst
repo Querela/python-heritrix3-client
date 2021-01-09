@@ -15,6 +15,7 @@ Overview
     * - package
       - | |version| |wheel| |supported-versions| |supported-implementations|
         | |commits-since|
+
 .. |docs| image:: https://readthedocs.org/projects/python-heritrix3-client/badge/?style=flat
     :target: https://readthedocs.org/projects/python-heritrix3-client
     :alt: Documentation Status
@@ -47,8 +48,6 @@ Overview
     :alt: Commits since latest release
     :target: https://github.com/Querela/python-heritrix3-client/compare/v0.0.0...master
 
-
-
 .. end-badges
 
 A internetarchive/heritrix3 python REST API client.
@@ -66,13 +65,10 @@ You can also install the in-development version with::
 
     pip install https://github.com/Querela/python-heritrix3-client/archive/master.zip
 
-
 Documentation
 =============
 
-
 https://python-heritrix3-client.readthedocs.io/
-
 
 Development
 ===========

@@ -9,6 +9,11 @@ WIP
 * Refactoring common code fragments.
 * Documentation (docstrings).
 
+0.3.0 (2021-01-11)
+------------------
+
+* Move into separate :mod:`~heritrix3.api` module. Empty ``__init__.py``.
+
 0.2.0 (2021-01-09)
 ------------------
 

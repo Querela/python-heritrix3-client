@@ -16,7 +16,9 @@ Why does this file exist, and why not put this in __main__?
 """
 import click
 
-from . import HeritrixAPIError
+from .api import HeritrixAPI
+from .api import HeritrixAPIError
+from .api import disable_ssl_warnings
 
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 
@@ -61,9 +63,6 @@ def main(ctx, host, username, password):
     ctx.obj = heritrix_conf
 
     if ctx.invoked_subcommand is not None:
-        from . import HeritrixAPI
-        from . import disable_ssl_warnings
-
         # disable insecure warnings ...
         disable_ssl_warnings()
 

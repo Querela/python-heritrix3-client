@@ -19,7 +19,7 @@ def read(*names, **kwargs):
 
 setup(
     name="heritrix3",
-    version="0.2.0",
+    version="0.3.0",
     license="MIT",
     description="A internetarchive/heritrix3 python REST API client.",
     long_description="%s\n%s"

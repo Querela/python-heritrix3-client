@@ -1,6 +1,7 @@
 import os
 import time
 from typing import Any
+from typing import BinaryIO
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -83,6 +84,9 @@ class HeritrixAPI:
             self.headers.update(headers)
 
         self.last_response: Optional[requests.Response] = None
+
+    # --------------------------------
+    # api requests
 
     def _post(
         self,
@@ -195,144 +199,7 @@ class HeritrixAPI:
         return self._post_action(action, url, data=data, code=code, raw=raw)
 
     # --------------------------------
-
-    def info(
-        self, job_name: Optional[str] = None, raw: bool = False
-    ) -> Union[str, requests.Response]:
-        url = None
-        if job_name is not None:
-            url = f"{self.host}/job/{job_name}"
-
-        resp = self._get(url=url, code=200, raw=raw)
-
-        return resp
-
-    def get_job_actions(self, job_name: str) -> List[str]:
-        # info = self.info(job_name=job_name, raw=False)
-        # return info["job"]["availableActions"]["value"]
-        resp = self.info(job_name=job_name, raw=True)
-        xml_doc = etree.fromstring(resp.text)
-        actions = xml_doc.xpath("/job/availableActions/value/text()")
-        return actions
-
-    def wait_for_action(
-        self,
-        job_name: str,
-        action: str,
-        timeout: Union[int, float] = 20,
-        poll_delay: Union[int, float] = 1,
-    ) -> bool:
-        if poll_delay <= 0:
-            raise ValueError("poll_delay mustn't be negative or null!")
-
-        time_start = time.time()
-
-        avail_actions = self.get_job_actions(job_name)
-        while action not in avail_actions:
-            if timeout is not None and (time.time() - time_start > timeout):
-                # raise TimeoutError
-                return False
-
-            time.sleep(poll_delay)
-            avail_actions = self.get_job_actions(job_name)
-
-        return True
-
-    # --------------------------------
-
-    def create(self, job_name: str, raw: bool = False) -> Union[str, requests.Response]:
-        if not job_name:
-            raise ValueError("Missing job name.")
-
-        return self._post_action("create", data={"createpath": job_name}, raw=raw)
-
-    def add(self, job_dir: str, raw: bool = False) -> Union[str, requests.Response]:
-        if not job_dir:
-            raise ValueError("Missing job directory.")
-        # TODO: check that a cxml file is in the directory?
-
-        return self._post_action("add", data={"addpath": job_dir}, raw=raw)
-
-    # --------------------------------
-
-    def build(self, job_name: str, raw: bool = False) -> Union[str, requests.Response]:
-        return self._job_action("build", job_name, raw=raw)
-
-    def launch(
-        self, job_name: str, checkpoint: Optional[str] = None, raw: bool = False
-    ) -> Union[str, requests.Response]:
-        data = None
-        if checkpoint is not None:
-            data = {"checkpoint": checkpoint}
-
-        return self._job_action("launch", job_name, data=data, raw=raw)
-
-    def pause(self, job_name: str, raw: bool = False) -> Union[str, requests.Response]:
-        return self._job_action("pause", job_name, raw=raw)
-
-    def unpause(
-        self, job_name: str, raw: bool = False
-    ) -> Union[str, requests.Response]:
-        return self._job_action("unpause", job_name, raw=raw)
-
-    def terminate(
-        self, job_name: str, raw: bool = False
-    ) -> Union[str, requests.Response]:
-        return self._job_action("terminate", job_name, raw=raw)
-
-    def teardown(
-        self, job_name: str, raw: bool = False
-    ) -> Union[str, requests.Response]:
-        return self._job_action("teardown", job_name, raw=raw)
-
-    def checkpoint(
-        self, job_name: str, raw: bool = False
-    ) -> Union[str, requests.Response]:
-        return self._job_action("checkpoint", job_name, raw=raw)
-
-    # --------------------------------
-
-    def rescan(self, raw: bool = False) -> Union[str, requests.Response]:
-        return self._post_action("rescan", raw=raw)
-
-    def copy(
-        self,
-        job_name: str,
-        new_job_name: str,
-        as_profile: bool = False,
-        raw: bool = False,
-    ) -> Union[str, requests.Response]:
-        if not new_job_name:
-            raise ValueError("new_job_name must not be empty!")
-
-        data = dict()
-        data["copyTo"] = new_job_name
-        if as_profile:
-            data["as_profile"] = "on"
-
-        return self._job_action("copy", job_name, data=data, raw=raw)
-
-    # --------------------------------
-
-    def execute_script(
-        self, job_name: str, script: str, engine: str = "beanshell", raw: bool = False
-    ) -> Union[str, requests.Response]:
-        if not job_name:
-            raise ValueError("Missing job name.")
-        if not script:
-            raise ValueError("Missing script?")
-        if engine not in ("beanshell", "js", "groovy", "AppleScriptEngine"):
-            raise ValueError(f"Invalid script engine param: {engine}")
-
-        data = dict()
-        data["engine"] = engine
-        data["script"] = script
-
-        url = f"{self.host}/job/{job_name}/script"
-
-        return self._post(url=url, data=data, raw=raw)
-
-    # --------------------------------
+    # upload/download
 
     def send_file(
         self, job_name: str, filepath: os.PathLike, name: Optional[str] = None
@@ -358,42 +225,24 @@ class HeritrixAPI:
             )
         return resp.ok
 
-    def send_config(self, job_name: str, cxml_filepath: os.PathLike) -> bool:
+    def send_content(
+        self, job_name: str, filecontent: Union[bytes, BinaryIO], name: str
+    ) -> bool:
         if not job_name:
             raise ValueError("Missing job name.")
-        if cxml_filepath is None or cxml_filepath == "":
-            raise ValueError("Missing cxml filepath name.")
-        if not os.path.exists(cxml_filepath) or not os.path.isfile(cxml_filepath):
-            raise FileNotFoundError(cxml_filepath)
+        if not name:
+            raise ValueError("Missing (upload file) name.")
 
-        # TODO: check config url with :func:`get_config_url()` ?
+        url = f"{self.host}/job/{job_name}/jobdir/{name}"
 
-        return self.send_file(job_name, cxml_filepath, "crawler-beans.cxml")
-
-    def get_config_url(self, job_name: str) -> str:
-        if not job_name:
-            raise ValueError("Missing job name.")
-
-        resp = self.info(job_name=job_name, raw=True)
-        if not resp:
-            raise HeritrixAPIError(
-                f"Error retrieving job info! {resp.status_code}"
-                f" - {resp.reason}, url={resp.url}"
-            )
-
-        xml_doc = etree.fromstring(resp.text)
-        config_url = xml_doc.xpath("/job/primaryConfigUrl[1]/text()")
-        if not config_url:
-            raise HeritrixAPIError("Invalid job configuration document?")
-
-        return config_url[0]
-
-    def get_config(self, job_name: str, raw: bool = True) -> str:
-        config_url = self.get_config_url(job_name)
-
-        resp = self._get(url=config_url, code=200, raw=raw)
-
-        return resp.text
+        resp = requests.put(
+            url,
+            auth=self.auth,
+            data=filecontent,
+            headers=self.headers,
+            verify=not self.insecure,
+        )
+        return resp.ok
 
     def retrieve_file(
         self,
@@ -436,7 +285,257 @@ class HeritrixAPI:
         return resp.ok
 
     # --------------------------------
+
+    def info(
+        self, job_name: Optional[str] = None, raw: bool = False
+    ) -> Union[str, requests.Response]:
+        url = None
+        if job_name is not None:
+            url = f"{self.host}/job/{job_name}"
+
+        resp = self._get(url=url, code=200, raw=raw)
+
+        return resp
+
+    def list_jobs(
+        self, status: Optional[str] = None, unbuilt: bool = False
+    ) -> List[str]:
+        resp: requests.Response = self._get(raw=True)
+        xml_doc = etree.fromstring(resp.text)
+
+        if unbuilt:
+            # if unbuilt, then search for those only
+            jobs = xml_doc.xpath("//jobs/value[./statusDescription = 'Unbuilt']")
+        elif status is not None:
+            # then search for crawlControllerState
+            jobs = xml_doc.xpath(f"//jobs/value[./crawlControllerState = '{status}']")
+        else:
+            # else all
+            jobs = xml_doc.xpath("//jobs/value")
+
+        job_names = [job.find("shortName").text for job in jobs]
+        return job_names
+
+    def get_job_state(self, job_name: str) -> Optional[str]:
+        resp = self.info(job_name=job_name, raw=True)
+        xml_doc = etree.fromstring(resp.text)
+        state = xml_doc.xpath("/job/crawlControllerState/text()")
+        if not state:
+            return None
+        return state[0]
+
+        # <statusDescription>Finished: FINISHED</statusDescription> # Active: RUNNING
+        # https://github.com/internetarchive/heritrix3/blob/adac067ea74b5a89f631ef771e2f598819bac6c4/engine/src/main/java/org/archive/crawler/framework/CrawlJob.java#L971  # noqa: E501
+
+        # <crawlExitStatus>FINISHED</crawlExitStatus> # RUNNING, ...
+        # https://github.com/internetarchive/heritrix3/blob/adac067ea74b5a89f631ef771e2f598819bac6c4/engine/src/main/java/org/archive/crawler/framework/CrawlController.java#L265  # noqa: E501
+        # -> CrawlStatus
+        # -> https://github.com/internetarchive/heritrix3/blob/master/engine/src/main/java/org/archive/crawler/framework/CrawlStatus.java
+
+        # <crawlControllerState>FINISHED</crawlControllerState>
+        # only set at end, while running it is empty
+        # -> State
+        # -> https://github.com/internetarchive/heritrix3/blob/adac067ea74b5a89f631ef771e2f598819bac6c4/engine/src/main/java/org/archive/crawler/framework/CrawlController.java#L267  # noqa: E501
+
+    def get_crawl_exit_state(self, job_name: str) -> Optional[str]:
+        resp = self.info(job_name=job_name, raw=True)
+        xml_doc = etree.fromstring(resp.text)
+        state = xml_doc.xpath("/job/crawlExitStatus/text()")
+        if not state:
+            return None
+        return state[0]
+
+    def get_job_actions(self, job_name: str) -> List[str]:
+        # info = self.info(job_name=job_name, raw=False)
+        # return info["job"]["availableActions"]["value"]
+        resp = self.info(job_name=job_name, raw=True)
+        xml_doc = etree.fromstring(resp.text)
+        actions = xml_doc.xpath("/job/availableActions/value/text()")
+        return actions
+
+    def wait_for_action(
+        self,
+        job_name: str,
+        action: str,
+        timeout: Union[int, float] = 20,
+        poll_delay: Union[int, float] = 1,
+    ) -> bool:
+        if poll_delay <= 0:
+            raise ValueError("poll_delay mustn't be negative or null!")
+
+        time_start = time.time()
+
+        avail_actions = self.get_job_actions(job_name)
+        while action not in avail_actions:
+            if timeout is not None and (time.time() - time_start > timeout):
+                # raise TimeoutError
+                return False
+
+            time.sleep(poll_delay)
+            avail_actions = self.get_job_actions(job_name)
+
+        return True
+
+    def wait_for_jobstate(
+        self,
+        job_name: str,
+        state: str,
+        timeout: Union[int, float] = 20,
+        poll_delay: Union[int, float] = 1,
+    ) -> bool:
+        if poll_delay <= 0:
+            raise ValueError("poll_delay mustn't be negative or null!")
+
+        time_start = time.time()
+
+        current_state = self.get_job_state(job_name)
+        while state not in current_state:
+            if timeout is not None and (time.time() - time_start > timeout):
+                # raise TimeoutError
+                return False
+
+            time.sleep(poll_delay)
+            current_state = self.get_job_state(job_name)
+
+        return True
+
     # --------------------------------
+    # new job
+
+    def create(self, job_name: str, raw: bool = False) -> Union[str, requests.Response]:
+        if not job_name:
+            raise ValueError("Missing job name.")
+
+        return self._post_action("create", data={"createpath": job_name}, raw=raw)
+
+    def add(self, job_dir: str, raw: bool = False) -> Union[str, requests.Response]:
+        if not job_dir:
+            raise ValueError("Missing job directory.")
+        # TODO: check that a cxml file is in the directory?
+
+        return self._post_action("add", data={"addpath": job_dir}, raw=raw)
+
+    def rescan(self, raw: bool = False) -> Union[str, requests.Response]:
+        return self._post_action("rescan", raw=raw)
+
+    def copy(
+        self,
+        job_name: str,
+        new_job_name: str,
+        as_profile: bool = False,
+        raw: bool = False,
+    ) -> Union[str, requests.Response]:
+        if not new_job_name:
+            raise ValueError("new_job_name must not be empty!")
+
+        data = dict()
+        data["copyTo"] = new_job_name
+        if as_profile:
+            data["as_profile"] = "on"
+
+        return self._job_action("copy", job_name, data=data, raw=raw)
+
+    # --------------------------------
+    # job control
+
+    def build(self, job_name: str, raw: bool = False) -> Union[str, requests.Response]:
+        return self._job_action("build", job_name, raw=raw)
+
+    def launch(
+        self, job_name: str, checkpoint: Optional[str] = None, raw: bool = False
+    ) -> Union[str, requests.Response]:
+        data = None
+        if checkpoint is not None:
+            data = {"checkpoint": checkpoint}
+
+        return self._job_action("launch", job_name, data=data, raw=raw)
+
+    def pause(self, job_name: str, raw: bool = False) -> Union[str, requests.Response]:
+        return self._job_action("pause", job_name, raw=raw)
+
+    def unpause(
+        self, job_name: str, raw: bool = False
+    ) -> Union[str, requests.Response]:
+        return self._job_action("unpause", job_name, raw=raw)
+
+    def terminate(
+        self, job_name: str, raw: bool = False
+    ) -> Union[str, requests.Response]:
+        return self._job_action("terminate", job_name, raw=raw)
+
+    def teardown(
+        self, job_name: str, raw: bool = False
+    ) -> Union[str, requests.Response]:
+        return self._job_action("teardown", job_name, raw=raw)
+
+    def checkpoint(
+        self, job_name: str, raw: bool = False
+    ) -> Union[str, requests.Response]:
+        return self._job_action("checkpoint", job_name, raw=raw)
+
+    # --------------------------------
+    # script execution
+
+    def execute_script(
+        self, job_name: str, script: str, engine: str = "beanshell", raw: bool = False
+    ) -> Union[str, requests.Response]:
+        if not job_name:
+            raise ValueError("Missing job name.")
+        if not script:
+            raise ValueError("Missing script?")
+        if engine not in ("beanshell", "js", "groovy", "AppleScriptEngine"):
+            raise ValueError(f"Invalid script engine param: {engine}")
+
+        data = dict()
+        data["engine"] = engine
+        data["script"] = script
+
+        url = f"{self.host}/job/{job_name}/script"
+
+        return self._post(url=url, data=data, raw=raw)
+
+    # --------------------------------
+    #  configs
+
+    def get_config(self, job_name: str, raw: bool = True) -> str:
+        config_url = self.get_config_url(job_name)
+
+        resp = self._get(url=config_url, code=200, raw=raw)
+
+        return resp.text
+
+    def send_config(self, job_name: str, cxml_filepath: os.PathLike) -> bool:
+        if not job_name:
+            raise ValueError("Missing job name.")
+        if cxml_filepath is None or cxml_filepath == "":
+            raise ValueError("Missing cxml filepath name.")
+        if not os.path.exists(cxml_filepath) or not os.path.isfile(cxml_filepath):
+            raise FileNotFoundError(cxml_filepath)
+
+        # TODO: check config url with :func:`get_config_url()` ?
+
+        return self.send_file(job_name, cxml_filepath, "crawler-beans.cxml")
+
+    def get_config_url(self, job_name: str) -> str:
+        if not job_name:
+            raise ValueError("Missing job name.")
+
+        resp = self.info(job_name=job_name, raw=True)
+        if not resp:
+            raise HeritrixAPIError(
+                f"Error retrieving job info! {resp.status_code}"
+                f" - {resp.reason}, url={resp.url}"
+            )
+
+        xml_doc = etree.fromstring(resp.text)
+        config_url = xml_doc.xpath("/job/primaryConfigUrl[1]/text()")
+        if not config_url:
+            raise HeritrixAPIError("Invalid job configuration document?")
+
+        return config_url[0]
+
+    # --------------------------------
+    # private: helpers - xml conversion
 
     @classmethod
     def _xml2json(cls, xml_str: Union[str, "etree._Element"]) -> str:
@@ -468,25 +567,7 @@ class HeritrixAPI:
         return {tree.tag: D}
 
     # --------------------------------
-
-    def list_jobs(
-        self, status: Optional[str] = None, unbuilt: bool = False
-    ) -> List[str]:
-        resp: requests.Response = self._get(raw=True)
-        xml_doc = etree.fromstring(resp.text)
-
-        if unbuilt:
-            # if unbuilt, then search for those only
-            jobs = xml_doc.xpath("//jobs/value[./statusDescription = 'Unbuilt']")
-        elif status is not None:
-            # then search for crawlControllerState
-            jobs = xml_doc.xpath(f"//jobs/value[./crawlControllerState = '{status}']")
-        else:
-            # else all
-            jobs = xml_doc.xpath("//jobs/value")
-
-        job_names = [job.find("shortName").text for job in jobs]
-        return job_names
+    # job infos
 
     def get_launchid(self, job_name: str) -> Optional[str]:
         script = "rawOut.println( appCtx.getCurrentLaunchId() );"
@@ -508,6 +589,9 @@ class HeritrixAPI:
             # build but not launched?
             return None
         return ret
+
+    # --------------------------------
+    # reports & logs
 
     def _get_report(
         self,
@@ -565,6 +649,49 @@ class HeritrixAPI:
 
         return None
 
+    def _get_log(
+        self,
+        job_name: str,
+        log_name: str,
+        launch_id: Optional[str] = None,
+    ) -> Optional[str]:
+        if launch_id is None:
+            try:
+                # if no launchid - try to get with "latest"
+                url = f"{self.host}/job/{job_name}/jobdir/latest/logs/{log_name}"
+
+                resp = self._get(url=url, api_headers=False, raw=True)
+                if resp.ok:
+                    return resp.text
+            except Exception as ex:  # noqa: F841
+                pass
+
+            # if that fails, try to query the launch_id and try again
+            launch_id = self.get_launchid(job_name)
+
+            if launch_id is None:
+                # unbuilt job?
+                # either it got anything with latest or there simply was not yet a crawl
+                raise HeritrixAPIError(
+                    f"Unbuilt Job {job_name}, check if has ever crawled?"
+                )
+
+            return self._get_log(
+                job_name,
+                log_name,
+                launch_id=launch_id,
+            )
+
+        # ----------------------------
+
+        url = f"{self.host}/job/{job_name}/jobdir/{launch_id}/logs/{log_name}"
+
+        resp = self._get(url=url, api_headers=False, raw=True)
+        if resp.ok:
+            return resp.text
+
+        return None
+
     def crawl_report(
         self, job_name: str, launch_id: Optional[str] = None
     ) -> Optional[str]:
@@ -615,7 +742,22 @@ class HeritrixAPI:
             launch_id=launch_id,
         )
 
+    def job_log(self, job_name: str) -> Optional[str]:
+        url = f"{self.host}/job/{job_name}/jobdir/job.log"
+
+        resp = self._get(url=url, api_headers=False, raw=True)
+        if resp.ok:
+            return resp.text
+
+        return None
+
+    def crawl_log(
+        self, job_name: str, launch_id: Optional[str] = None
+    ) -> Optional[str]:
+        return self._get_log(job_name, log_name="crawl.log", launch_id=launch_id)
+
     # --------------------------------
+    # job files
 
     def list_files(
         self, job_name: str, gather_files: bool = True, gather_folders: bool = True

@@ -9,6 +9,13 @@ WIP
 * Refactoring common code fragments.
 * Documentation (docstrings).
 
+0.4.0 (2021-01-11)
+------------------
+
+* Reorder :mod:`~heritrix3.api` functions.
+* Add log retrieval methods.
+* Add job state check + ``wait_for`` methods.
+
 0.3.0 (2021-01-11)
 ------------------
 

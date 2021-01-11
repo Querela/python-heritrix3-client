@@ -20,7 +20,7 @@ project = "Heritrix3 Client"
 year = "2021"
 author = "Erik Körner"
 copyright = "{0}, {1}".format(year, author)
-version = release = "0.3.0"
+version = release = "0.4.0"
 
 pygments_style = "trac"
 templates_path = ["."]

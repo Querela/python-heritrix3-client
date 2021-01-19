@@ -389,7 +389,7 @@ class HeritrixAPI:
         time_start = time.time()
 
         current_state = self.get_job_state(job_name)
-        while state not in current_state:
+        while state != current_state:
             if timeout is not None and (time.time() - time_start > timeout):
                 # raise TimeoutError
                 return False
